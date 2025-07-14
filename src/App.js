@@ -341,42 +341,66 @@ function App() {
     
     // Handler to switch cameras
     const handleSwitchCamera = useCallback(async () => {
-        if (videoDevices.length < 2) return;
+        if (videoDevices.length < 2) {
+            console.log('Switch camera aborted: Not enough video devices.');
+            return;
+        }
+        if (!localStreamRef.current) {
+            console.log('Switch camera aborted: Local stream is not available.');
+            return;
+        }
 
+        console.log('Attempting to switch camera...');
         const nextIndex = (currentCameraIndex + 1) % videoDevices.length;
         const newDeviceId = videoDevices[nextIndex].deviceId;
+        console.log(`Switching to device: ${videoDevices[nextIndex].label} (${newDeviceId})`);
+
+        // Get the current video track to stop it later
+        const oldTrack = localStreamRef.current.getVideoTracks()[0];
+        if (!oldTrack) {
+            console.error('Switch camera failed: Could not find an existing video track to replace.');
+            return;
+        }
 
         try {
-            // Get new video stream from the next camera
+            // Get the new video stream from the next camera
             const newStream = await navigator.mediaDevices.getUserMedia({
                 video: { deviceId: { exact: newDeviceId } },
             });
             const newVideoTrack = newStream.getVideoTracks()[0];
 
-            // If a call is active, replace the track in the peer connection
-            if (peerRef.current && localStreamRef.current) {
-                const oldTrack = localStreamRef.current.getVideoTracks()[0];
-                peerRef.current.replaceTrack(oldTrack, newVideoTrack, localStreamRef.current);
-                oldTrack.stop(); // Stop the old camera track
+            if (!newVideoTrack) {
+                console.error('Switch camera failed: getUserMedia succeeded but returned no video track.');
+                return;
             }
 
-            // Update the local stream reference
-            if (localStreamRef.current) {
-                 localStreamRef.current.removeTrack(localStreamRef.current.getVideoTracks()[0]);
-                 localStreamRef.current.addTrack(newVideoTrack);
-            } else {
-                 localStreamRef.current = newStream;
-            }
-
-            // Update the local video element to show the new camera feed
+            // Update the local video element to show the new camera feed immediately
             if (localVideoRef.current) {
-                localVideoRef.current.srcObject = localStreamRef.current;
+                // Create a temporary stream for local display
+                const displayStream = new MediaStream([newVideoTrack]);
+                localVideoRef.current.srcObject = displayStream;
             }
             
+            // If a call is active, replace the track in the peer connection
+            if (peerRef.current && peerRef.current.streams) {
+                 console.log('Peer connection found. Replacing track.');
+                 peerRef.current.replaceTrack(oldTrack, newVideoTrack, localStreamRef.current);
+            }
+
+            // Stop the old camera track
+            oldTrack.stop();
+
+            // Update the main local stream reference
+            localStreamRef.current.removeTrack(oldTrack);
+            localStreamRef.current.addTrack(newVideoTrack);
+            
             setCurrentCameraIndex(nextIndex);
+            console.log('Camera switch successful.');
+
         } catch (err) {
             console.error('Error switching camera:', err);
-            alert('Could not switch camera.');
+            // This alert is what you are likely seeing
+            alert('Could not switch camera. Please check browser permissions.');
         }
     }, [videoDevices, currentCameraIndex]);
 
