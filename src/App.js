@@ -1,7 +1,15 @@
 // --- ROBUST POLYFILLS FOR BROWSER ENVIRONMENT ---
 // This MUST be at the very top of the file, before any imports.
-import { Buffer } from 'buffer';
+// NO LONGER TRUE: All imports must be at the very top.
 
+// --- ALL IMPORTS MUST BE AT THE TOP ---
+import { Buffer } from 'buffer';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
+import io from 'socket.io-client';
+import Peer from 'simple-peer';
+// --- END ALL IMPORTS ---
+
+// --- Polyfills (after all imports) ---
 // Provide a global Buffer object, which some dependencies might expect.
 window.Buffer = Buffer;
 
@@ -16,10 +24,6 @@ window.process = {
     }
 };
 // --- END POLYFILLS ---
-
-import React, { useEffect, useRef, useState, useCallback } from 'react';
-import io from 'socket.io-client';
-import Peer from 'simple-peer';
 
 const SIGNALING_SERVER_URL = 'http://localhost:5000';
 
