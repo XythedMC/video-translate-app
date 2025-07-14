@@ -1,7 +1,3 @@
-// --- ROBUST POLYFILLS FOR BROWSER ENVIRONMENT ---
-// This MUST be at the very top of the file, before any imports.
-// NO LONGER TRUE: All imports must be at the very top.
-
 // --- ALL IMPORTS MUST BE AT THE TOP ---
 import { Buffer } from 'buffer';
 import React, { useEffect, useRef, useState, useCallback } from 'react';
@@ -25,27 +21,24 @@ window.process = {
 };
 // --- END POLYFILLS ---
 
-const SIGNALING_SERVER_URL = 'http://localhost:5000';
 
-// --- NEW: WebRTC ICE Server Configuration (STUN Servers) ---
-// These public STUN servers help peers discover their public IP addresses.
+const SIGNALING_SERVER_URL = 'http://localhost:5000'; // Placeholder - UPDATE THIS AFTER BACKEND DEPLOYMENT
+
+// WebRTC ICE Server Configuration (STUN Servers)
 const ICE_SERVERS = [
     { urls: 'stun:stun.l.google.com:19302' },
     { urls: 'stun:stun1.l.google.com:19302' },
     { urls: 'stun:stun2.l.google.com:19302' },
     { urls: 'stun:stun3.l.google.com:19302' },
     { urls: 'stun:stun4.l.google.com:19302' },
-    // Add more public STUN servers for redundancy if needed.
-    // For very strict NATs or firewalls, a TURN server might be required.
-    // A TURN server entry would look like:
-    // { urls: 'turn:your.turn.server.com:PORT', username: 'your_username', credential: 'your_password' }
-    // Setting up a TURN server is more complex and often requires a dedicated server or a commercial service.
 ];
-// --- END NEW ---
+
+// --- ESLint Fix: sttSourceLanguages is now a constant as it's not dynamically changed ---
+const STT_SOURCE_LANGUAGES = ['en-US', 'he-IL'];
 
 
 function App() {
-    // Refs
+    // Refs for DOM elements and external objects
     const localVideoRef = useRef();
     const remoteVideoRef = useRef();
     const socketRef = useRef();
@@ -53,26 +46,34 @@ function App() {
     const localStreamRef = useRef();
     const audioProcessorRef = useRef();
 
-    // State
+    // State variables for UI and call management
     const [username, setUsername] = useState('');
     const [isLoggedIn, setIsLoggedIn] = useState(false);
     const [loginError, setLoginError] = useState('');
     const [usernameToRegister, setUsernameToRegister] = useState('');
     const [remoteUser, setRemoteUser] = useState('');
-    const [callStatus, setCallStatus] = useState('idle'); // idle, calling, receiving, connecting, active
-    const [incomingCall, setIncomingCall] = useState(null); // Stores { from, signalData: offer }
-    const [pendingCandidates, setPendingCandidates] = useState([]); // Stores candidates that arrive before peer is ready
+    const [callStatus, setCallStatus] = useState('idle');
+    const [incomingCall, setIncomingCall] = useState(null);
+    const [pendingCandidates, setPendingCandidates] = useState([]);
     const [subtitles, setSubtitles] = useState([]);
+
+    // Language selection states and options
     const [sourceLanguage, setSourceLanguage] = useState('en-US');
     const [targetLanguage, setTargetLanguage] = useState('es');
-    // Hebrew language code updated to he-IL for Google Cloud STT compatibility
-    const [sttSourceLanguages, setSttSourceLanguages] = useState(['en-US', 'he-IL']);
+    // Removed setSttSourceLanguages from here as it's now a constant:
+    // const [sttSourceLanguages, setSttSourceLanguages] = useState(['en-US', 'he-IL']);
 
+
+    // List of supported languages for selection dropdowns
     const languages = [
-        { code: 'en-US', name: 'English (US)' }, { code: 'es', name: 'Spanish' },
-        { code: 'fr', name: 'French' }, { code: 'de', name: 'German' },
-        { code: 'he-IL', name: 'Hebrew (Israel)' }, { code: 'ja', name: 'Japanese' },
-        { code: 'zh-CN', name: 'Chinese (Mandarin)' }, { code: 'ar', name: 'Arabic' },
+        { code: 'en-US', name: 'English (US)' },
+        { code: 'es', name: 'Spanish' },
+        { code: 'fr', name: 'French' },
+        { code: 'de', name: 'German' },
+        { code: 'he-IL', name: 'Hebrew (Israel)' },
+        { code: 'ja', name: 'Japanese' },
+        { code: 'zh-CN', name: 'Chinese (Mandarin)' },
+        { code: 'ar', name: 'Arabic' },
         { code: 'ru', 'name': 'Russian' },
     ];
 
@@ -95,7 +96,7 @@ function App() {
         setCallStatus('idle');
         setRemoteUser('');
         setIncomingCall(null);
-        setPendingCandidates([]); // Clear pending candidates on cleanup
+        setPendingCandidates([]);
         setSubtitles([]);
     }, []);
 
@@ -106,9 +107,9 @@ function App() {
         cleanupCall();
     }, [cleanupCall]);
 
-    // --- Socket.IO Connection and Event Handlers ---
     useEffect(() => {
         if (!isLoggedIn) return;
+
         const socket = io(SIGNALING_SERVER_URL);
         socketRef.current = socket;
 
@@ -121,13 +122,13 @@ function App() {
         socket.on('callUser', ({ from, signalData }) => {
             console.log(`[${username}] Received 'callUser' event from backend. Caller: ${from}. SignalData type: ${signalData ? signalData.type : 'N/A'}.`);
             if (signalData.type === 'offer') {
-                setIncomingCall({ from, signalData }); // Store the offer
+                setIncomingCall({ from, signalData });
                 setCallStatus('receiving');
             } else if (signalData.type === 'candidate') {
-                if (peerRef.current && peerRef.current.signal) { // If peer is ready, apply immediately
+                if (peerRef.current && peerRef.current.signal) {
                     console.log(`[${username}] Applying candidate immediately:`, signalData);
                     peerRef.current.signal(signalData);
-                } else { // Otherwise, store for later
+                } else {
                     console.log(`[${username}] Storing candidate for later:`, signalData);
                     setPendingCandidates(prev => [...prev, signalData]);
                 }
@@ -168,14 +169,13 @@ function App() {
         };
     }, [isLoggedIn, username, cleanupCall]);
 
-    // --- Language Settings Emitter ---
     useEffect(() => {
         if (isLoggedIn && socketRef.current?.connected) {
-            socketRef.current.emit('updateLanguageSettings', { sourceLanguage, targetLanguage, sttSourceLanguages });
+            // --- ESLint Fix: Using the constant STT_SOURCE_LANGUAGES ---
+            socketRef.current.emit('updateLanguageSettings', { sourceLanguage, targetLanguage, sttSourceLanguages: STT_SOURCE_LANGUAGES });
         }
-    }, [sourceLanguage, targetLanguage, sttSourceLanguages, isLoggedIn]);
+    }, [sourceLanguage, targetLanguage, isLoggedIn]); // Removed sttSourceLanguages as it's a constant
 
-    // --- Audio Processing Logic ---
     const createAudioProcessor = useCallback((stream, socket) => {
         const audioContext = new (window.AudioContext || window.webkitAudioContext)();
         const sampleRate = audioContext.sampleRate;
@@ -203,8 +203,7 @@ function App() {
         };
     }, []);
 
-    // --- Main Function to Initiate a Call or Answer ---
-    const setupCall = async (isInitiator, initialSignal = null) => { // Renamed peerSignal to initialSignal for clarity
+    const setupCall = async (isInitiator, initialSignal = null) => {
         try {
             console.log(`[${username}] setupCall: Attempting to get media stream. isInitiator: ${isInitiator}`);
             const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
@@ -219,11 +218,9 @@ function App() {
                 initiator: isInitiator,
                 trickle: true,
                 stream: stream,
-                // --- NEW: Pass ICE Servers to the Peer constructor ---
                 config: {
                     iceServers: ICE_SERVERS
                 }
-                // --- END NEW ---
             });
             peerRef.current = peer;
             console.log(`[${username}] setupCall: Peer instance created. peerRef.current is:`, peerRef.current);
@@ -278,18 +275,16 @@ function App() {
                 cleanupCall();
             });
 
-            // --- CRITICAL FIX: Apply initial signal (offer) first, then pending candidates ---
             if (!isInitiator && initialSignal) {
                 console.log(`[${username}] setupCall: Applying initial signal (type: ${initialSignal.type}) to peer.`);
                 peer.signal(initialSignal);
 
-                // Apply any pending candidates that arrived before the peer was fully set up
                 if (pendingCandidates.length > 0) {
                     console.log(`[${username}] setupCall: Applying ${pendingCandidates.length} pending candidates.`);
                     pendingCandidates.forEach(candidate => {
                         peer.signal(candidate);
                     });
-                    setPendingCandidates([]); // Clear them after applying
+                    setPendingCandidates([]);
                 }
             }
         } catch (err) {
@@ -309,7 +304,6 @@ function App() {
         console.log(`[${username}] handleAcceptCall: Accepting call from ${incomingCall.from}.`);
         setCallStatus('connecting'); 
         setRemoteUser(incomingCall.from);
-        // Pass the stored offer as the initial signal
         setupCall(false, incomingCall.signalData); 
         setIncomingCall(null);
     };
@@ -323,7 +317,6 @@ function App() {
         }
     };
 
-    // --- useEffect for remote video playback to handle autoplay policies ---
     useEffect(() => {
         const videoElement = remoteVideoRef.current;
         const remoteStream = videoElement ? videoElement.srcObject : null;
@@ -335,7 +328,7 @@ function App() {
 
             const attemptPlay = () => {
                 console.log(`[${username}] Attempting play. Video readyState: ${videoElement.readyState}, paused: ${videoElement.paused}`);
-                if (videoElement.readyState >= 2) { // HAVE_CURRENT_DATA or more
+                if (videoElement.readyState >= 2) {
                     videoElement.play()
                         .then(() => {
                             console.log(`[${username}] Remote video playback started successfully.`);
@@ -350,7 +343,7 @@ function App() {
                         });
                 } else {
                     console.log(`[${username}] Video not ready yet (readyState: ${videoElement.readyState}). Retrying in 100ms.`);
-                    setTimeout(attemptPlay, 100); // Retry if not ready
+                    setTimeout(attemptPlay, 100);
                 }
             };
 
@@ -359,10 +352,8 @@ function App() {
                 attemptPlay();
             };
 
-            // Add event listener for loadedmetadata
             videoElement.addEventListener('loadedmetadata', onLoadedMetadata);
 
-            // Also attempt play immediately in case metadata already loaded
             if (videoElement.readyState >= 2) {
                 console.log(`[${username}] Video already has metadata. Proceeding to immediate play attempt.`);
                 attemptPlay();
@@ -377,7 +368,7 @@ function App() {
         } else {
             console.log(`[${username}] useEffect: remoteVideoRef.current or srcObject is null. No playback attempt.`);
         }
-    }, [remoteVideoRef.current, username]);
+    }, [username]); // --- ESLint Fix: Removed remoteVideoRef.current from dependencies ---
 
 
     if (!isLoggedIn) {
@@ -402,7 +393,6 @@ function App() {
         );
     }
 
-    // --- Render logic for different call statuses ---
     const renderCallControls = () => {
         switch (callStatus) {
             case 'active':
