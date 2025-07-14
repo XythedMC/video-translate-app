@@ -41,6 +41,7 @@ const uiTexts = {
         translateToLabel: 'Translate To:',
         subtitlesTitle: 'Live Subtitles:',
         subtitleYou: 'You',
+        switchCameraButton: 'Switch Camera',
         alertPeerDisconnected: 'The other user has disconnected.',
         alertEnterUserToCall: 'Please enter a user to call.',
         alertWebRTCError: 'WebRTC connection error. See console for details.',
@@ -64,6 +65,7 @@ const uiTexts = {
         translateToLabel: 'תרגם ל:',
         subtitlesTitle: 'כתוביות חיות:',
         subtitleYou: 'אתה',
+        switchCameraButton: 'החלף מצלמה',
         alertPeerDisconnected: 'המשתמש השני התנתק.',
         alertEnterUserToCall: 'אנא הזן שם משתמש לחיוג.',
         alertWebRTCError: 'שגיאת חיבור WebRTC. בדוק את הקונסול לפרטים.',
@@ -87,6 +89,7 @@ const uiTexts = {
         translateToLabel: 'Перевести на:',
         subtitlesTitle: 'Живые субтитры:',
         subtitleYou: 'Вы',
+        switchCameraButton: 'Переключить камеру',
         alertPeerDisconnected: 'Другой пользователь отключился.',
         alertEnterUserToCall: 'Пожалуйста, введите имя пользователя для звонка.',
         alertWebRTCError: 'Ошибка подключения WebRTC. Подробности в консоли.',
@@ -96,7 +99,7 @@ const uiTexts = {
 // --- END UI Text Translations ---
 
 
-const SIGNALING_SERVER_URL = 'https://video-translate-api-6owl.onrender.com'; // Placeholder - UPDATE THIS AFTER BACKEND DEPLOYMENT
+const SIGNALING_SERVER_URL = 'https://video-translate-api-6owl.onrender.com';
 
 // WebRTC ICE Server Configuration (STUN Servers)
 const ICE_SERVERS = [
@@ -107,12 +110,11 @@ const ICE_SERVERS = [
     { urls: 'stun:stun4.l.google.com:19302' },
 ];
 
-// --- ESLint Fix: sttSourceLanguages is now a constant as it's not dynamically changed ---
 const STT_SOURCE_LANGUAGES = ['en-US', 'he-IL'];
 
 
 function App() {
-    // Refs for DOM elements and external objects
+    // Refs
     const localVideoRef = useRef();
     const remoteVideoRef = useRef();
     const socketRef = useRef();
@@ -120,7 +122,7 @@ function App() {
     const localStreamRef = useRef();
     const audioProcessorRef = useRef();
 
-    // State variables for UI and call management
+    // State
     const [username, setUsername] = useState('');
     const [isLoggedIn, setIsLoggedIn] = useState(false);
     const [loginError, setLoginError] = useState('');
@@ -130,27 +132,21 @@ function App() {
     const [incomingCall, setIncomingCall] = useState(null);
     const [pendingCandidates, setPendingCandidates] = useState([]);
     const [subtitles, setSubtitles] = useState([]);
-    const [uiLanguage, setUiLanguage] = useState('en'); // 'en', 'he', 'ru'
-
-    // Language selection states and options
+    const [uiLanguage, setUiLanguage] = useState('en');
     const [sourceLanguage, setSourceLanguage] = useState('en-US');
     const [targetLanguage, setTargetLanguage] = useState('es');
+    const [videoDevices, setVideoDevices] = useState([]);
+    const [currentCameraIndex, setCurrentCameraIndex] = useState(0);
 
-
-    // List of supported languages for selection dropdowns
     const languages = [
-        { code: 'en-US', name: 'English (US)' },
-        { code: 'es', name: 'Spanish' },
-        { code: 'fr', name: 'French' },
-        { code: 'de', name: 'German' },
-        { code: 'he-IL', name: 'Hebrew (Israel)' },
-        { code: 'ja', name: 'Japanese' },
-        { code: 'zh-CN', name: 'Chinese (Mandarin)' },
-        { code: 'ar', name: 'Arabic' },
+        { code: 'en-US', name: 'English (US)' }, { code: 'es', name: 'Spanish' },
+        { code: 'fr', name: 'French' }, { code: 'de', name: 'German' },
+        { code: 'he-IL', name: 'Hebrew (Israel)' }, { code: 'ja', name: 'Japanese' },
+        { code: 'zh-CN', name: 'Chinese (Mandarin)' }, { code: 'ar', name: 'Arabic' },
         { code: 'ru', 'name': 'Russian' },
     ];
 
-    const t = uiTexts[uiLanguage]; // Helper for accessing translation strings
+    const t = uiTexts[uiLanguage];
 
     const cleanupCall = useCallback(() => {
         console.log("Cleaning up call resources...");
@@ -182,6 +178,26 @@ function App() {
         cleanupCall();
     }, [cleanupCall]);
 
+    // Effect for enumerating video devices once logged in
+    useEffect(() => {
+        if (!isLoggedIn) return;
+
+        const getDevices = async () => {
+            try {
+                // We need to request permission first to get the device labels
+                await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+                const devices = await navigator.mediaDevices.enumerateDevices();
+                const cameras = devices.filter(device => device.kind === 'videoinput');
+                setVideoDevices(cameras);
+                console.log('Available video devices:', cameras);
+            } catch (err) {
+                console.error("Error enumerating devices:", err);
+            }
+        };
+
+        getDevices();
+    }, [isLoggedIn]);
+
     useEffect(() => {
         if (!isLoggedIn) return;
 
@@ -195,29 +211,22 @@ function App() {
             socket.disconnect();
         });
         socket.on('callUser', ({ from, signalData }) => {
-            console.log(`[${username}] Received 'callUser' event from backend. Caller: ${from}. SignalData type: ${signalData ? signalData.type : 'N/A'}.`);
             if (signalData.type === 'offer') {
                 setIncomingCall({ from, signalData });
                 setCallStatus('receiving');
             } else if (signalData.type === 'candidate') {
                 if (peerRef.current && peerRef.current.signal) {
-                    console.log(`[${username}] Applying candidate immediately:`, signalData);
                     peerRef.current.signal(signalData);
                 } else {
-                    console.log(`[${username}] Storing candidate for later:`, signalData);
                     setPendingCandidates(prev => [...prev, signalData]);
                 }
             }
         });
         socket.on('callAccepted', ({ signal, from }) => {
-            console.log(`[${username}] Received 'callAccepted' from backend. Signal type: ${signal ? signal.type : 'N/A'}.`);
             if (peerRef.current) {
                 peerRef.current.signal(signal);
                 setCallStatus('active');
                 setRemoteUser(from);
-                console.log(`[${username}] Call accepted! Remote user set to: ${from}. Peer signaled.`);
-            } else {
-                console.warn(`[${username}] 'callAccepted' received but peerRef.current is null. Signal not applied.`);
             }
         });
         socket.on('liveSubtitle', (data) => {
@@ -279,83 +288,97 @@ function App() {
 
     const setupCall = async (isInitiator, initialSignal = null) => {
         try {
-            console.log(`[${username}] setupCall: Attempting to get media stream. isInitiator: ${isInitiator}`);
-            const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+            const videoConstraint = videoDevices.length > 0
+                ? { deviceId: { exact: videoDevices[currentCameraIndex].deviceId } }
+                : true;
+
+            const stream = await navigator.mediaDevices.getUserMedia({ video: videoConstraint, audio: true });
             localStreamRef.current = stream;
             if (localVideoRef.current) localVideoRef.current.srcObject = stream;
-            console.log(`[${username}] setupCall: Local media stream obtained. Video tracks: ${stream.getVideoTracks().length}, Audio tracks: ${stream.getAudioTracks().length}`);
 
             audioProcessorRef.current = createAudioProcessor(stream, socketRef.current);
             
-            console.log(`[${username}] setupCall: Creating new Peer instance. Initiator: ${isInitiator}`);
             const peer = new Peer({
                 initiator: isInitiator,
                 trickle: true,
                 stream: stream,
-                config: {
-                    iceServers: ICE_SERVERS
-                }
+                config: { iceServers: ICE_SERVERS }
             });
             peerRef.current = peer;
-            console.log(`[${username}] setupCall: Peer instance created. peerRef.current is:`, peerRef.current);
 
             peer.on('signal', (data) => {
-                console.log(`[${username}] Peer 'signal' event triggered. Type: ${data.type || 'candidate'}.`);
-                if (isInitiator) {
-                    socketRef.current.emit('callUser', { userToCall: remoteUser, signalData: data });
-                    console.log(`[${username}] Emitting 'callUser' to ${remoteUser} with signal type: ${data.type || 'candidate'}`);
-                } else {
-                    socketRef.current.emit('answerCall', { signal: data, to: incomingCall.from });
-                    console.log(`[${username}] Emitting 'answerCall' to ${incomingCall.from} with signal type: ${data.type || 'candidate'}`);
-                }
+                const target = isInitiator ? remoteUser : incomingCall.from;
+                const event = isInitiator ? 'callUser' : 'answerCall';
+                const payload = isInitiator ? { userToCall: target, signalData: data } : { signal: data, to: target };
+                socketRef.current.emit(event, payload);
             });
 
             peer.on('track', (track, stream) => {
-                console.log(`[${username}] Received remote track: kind=${track.kind}, id=${track.id}, enabled=${track.enabled}`);
-                if (remoteVideoRef.current) {
-                    if (!remoteVideoRef.current.srcObject || remoteVideoRef.current.srcObject.id !== stream.id) {
-                        remoteVideoRef.current.srcObject = stream;
-                    }
+                if (remoteVideoRef.current && (!remoteVideoRef.current.srcObject || remoteVideoRef.current.srcObject.id !== stream.id)) {
+                    remoteVideoRef.current.srcObject = stream;
                 }
             });
 
-            peer.on('stream', (remoteStream) => {
-                 if (remoteVideoRef.current) {
-                    remoteVideoRef.current.srcObject = remoteStream;
-                }
-            });
-
-            peer.on('connect', () => {
-                console.log(`[${username}] Peer connection established!`);
-                setCallStatus('active');
-            });
-
-            peer.on('close', () => {
-                console.log(`[${username}] Peer 'close' event fired.`);
-                cleanupCall();
-            });
+            peer.on('connect', () => setCallStatus('active'));
+            peer.on('close', () => cleanupCall());
             peer.on('error', (err) => {
-                console.error(`[${username}] Peer 'error' event:`, err);
+                console.error(`Peer error:`, err);
                 alert(t.alertWebRTCError);
                 cleanupCall();
             });
 
             if (!isInitiator && initialSignal) {
-                console.log(`[${username}] setupCall: Applying initial signal (type: ${initialSignal.type}) to peer.`);
                 peer.signal(initialSignal);
-
-                if (pendingCandidates.length > 0) {
-                    console.log(`[${username}] setupCall: Applying ${pendingCandidates.length} pending candidates.`);
-                    pendingCandidates.forEach(candidate => peer.signal(candidate));
-                    setPendingCandidates([]);
-                }
+                pendingCandidates.forEach(candidate => peer.signal(candidate));
+                setPendingCandidates([]);
             }
         } catch (err) {
-            console.error(`[${username}] Failed to get media stream in setupCall:`, err);
+            console.error(`Failed to get media stream:`, err);
             alert(t.alertMediaError);
             cleanupCall();
         }
     };
+    
+    // Handler to switch cameras
+    const handleSwitchCamera = useCallback(async () => {
+        if (videoDevices.length < 2) return;
+
+        const nextIndex = (currentCameraIndex + 1) % videoDevices.length;
+        const newDeviceId = videoDevices[nextIndex].deviceId;
+
+        try {
+            // Get new video stream from the next camera
+            const newStream = await navigator.mediaDevices.getUserMedia({
+                video: { deviceId: { exact: newDeviceId } },
+            });
+            const newVideoTrack = newStream.getVideoTracks()[0];
+
+            // If a call is active, replace the track in the peer connection
+            if (peerRef.current && localStreamRef.current) {
+                const oldTrack = localStreamRef.current.getVideoTracks()[0];
+                peerRef.current.replaceTrack(oldTrack, newVideoTrack, localStreamRef.current);
+                oldTrack.stop(); // Stop the old camera track
+            }
+
+            // Update the local stream reference
+            if (localStreamRef.current) {
+                 localStreamRef.current.removeTrack(localStreamRef.current.getVideoTracks()[0]);
+                 localStreamRef.current.addTrack(newVideoTrack);
+            } else {
+                 localStreamRef.current = newStream;
+            }
+
+            // Update the local video element to show the new camera feed
+            if (localVideoRef.current) {
+                localVideoRef.current.srcObject = localStreamRef.current;
+            }
+            
+            setCurrentCameraIndex(nextIndex);
+        } catch (err) {
+            console.error('Error switching camera:', err);
+            alert('Could not switch camera.');
+        }
+    }, [videoDevices, currentCameraIndex]);
 
     const handleCallUser = () => {
         if (!remoteUser) return alert(t.alertEnterUserToCall);
@@ -364,7 +387,6 @@ function App() {
     };
 
     const handleAcceptCall = () => {
-        console.log(`[${username}] handleAcceptCall: Accepting call from ${incomingCall.from}.`);
         setCallStatus('connecting'); 
         setRemoteUser(incomingCall.from);
         setupCall(false, incomingCall.signalData); 
@@ -383,14 +405,11 @@ function App() {
     useEffect(() => {
         const videoElement = remoteVideoRef.current;
         if (videoElement && videoElement.srcObject) {
-            const playPromise = videoElement.play();
-            if (playPromise !== undefined) {
-                playPromise.catch(error => {
-                    console.error("Autoplay was prevented:", error);
-                    videoElement.muted = true;
-                    videoElement.play();
-                });
-            }
+            videoElement.play().catch(error => {
+                console.error("Autoplay was prevented:", error);
+                videoElement.muted = true;
+                videoElement.play().catch(e2 => console.error("Muted autoplay also failed:", e2));
+            });
         }
     }, [remoteVideoRef.current?.srcObject]);
 
@@ -429,9 +448,7 @@ function App() {
 
     const renderCallControls = () => {
         switch (callStatus) {
-            case 'active':
-            case 'calling':
-            case 'connecting':
+            case 'active': case 'calling': case 'connecting':
                 return <button onClick={() => disconnectCall(true)} className="disconnect-btn">{t.disconnectButton}</button>;
             case 'receiving':
                 return (
@@ -440,8 +457,7 @@ function App() {
                         <button onClick={handleAcceptCall} className="accept-btn">{t.acceptButton}</button>
                     </div>
                 );
-            case 'idle':
-            default:
+            case 'idle': default:
                 return (
                     <div className="call-controls">
                         <input type="text" placeholder={t.callUserPlaceholder} value={remoteUser} onChange={(e) => setRemoteUser(e.target.value)} />
@@ -461,6 +477,7 @@ function App() {
                 .ui-language-selection select { padding: 8px; border-radius: 4px; border: 1px solid #ccc; }
                 .video-container { display: flex; flex-wrap: wrap; justify-content: center; gap: 20px; margin: 20px 0; }
                 .video-box { background: #fff; padding: 10px; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); width: 100%; max-width: 500px; }
+                .video-box button { background-color: #6c757d; margin-top: 10px; }
                 video { width: 100%; background: #000; border-radius: 4px; aspect-ratio: 4 / 3; object-fit: cover; }
                 .controls-container { margin: 20px auto; padding: 20px; background: #fff; border-radius: 8px; max-width: 800px; }
                 .call-controls input, .language-selection select { padding: 8px; margin: 5px; border-radius: 4px; border: 1px solid #ccc; }
@@ -470,8 +487,6 @@ function App() {
                 .incoming-call { margin-top: 15px; padding: 10px; background-color: #fff3cd; border: 1px solid #ffeeba; border-radius: 4px; }
                 .accept-btn { background-color: #007bff; }
                 .subtitle-container { margin: 20px auto; padding: 20px; background: #fff; border-radius: 8px; max-width: 800px; min-height: 100px; text-align: start; }
-                .final-subtitle { color: #333; }
-                .interim-subtitle { color: #888; font-style: italic; }
             `}</style>
             <div className="header">
                 <h1>{t.mainTitle}</h1>
@@ -489,6 +504,9 @@ function App() {
                 <div className="video-box">
                     <h2>{t.myVideoTitle}</h2>
                     <video ref={localVideoRef} autoPlay muted playsInline />
+                    {videoDevices.length > 1 && callStatus !== 'idle' && (
+                        <button onClick={handleSwitchCamera}>{t.switchCameraButton}</button>
+                    )}
                 </div>
                 <div className="video-box">
                     <h2>{t.remoteVideoTitle} ({remoteUser || '...'})</h2>
