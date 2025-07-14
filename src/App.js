@@ -22,7 +22,7 @@ window.process = {
 // --- END POLYFILLS ---
 
 
-const SIGNALING_SERVER_URL = 'http://localhost:5000'; // Placeholder - UPDATE THIS AFTER BACKEND DEPLOYMENT
+const SIGNALING_SERVER_URL = 'https://video-translate-api-6owl.onrender.com'; // Placeholder - UPDATE THIS AFTER BACKEND DEPLOYMENT
 
 // WebRTC ICE Server Configuration (STUN Servers)
 const ICE_SERVERS = [
