@@ -21,6 +21,80 @@ window.process = {
 };
 // --- END POLYFILLS ---
 
+// --- UI Text Translations ---
+const uiTexts = {
+    en: {
+        loginTitle: 'Video Call & Translate',
+        loginSubtitle: 'Choose a username to begin.',
+        usernamePlaceholder: 'Enter your username',
+        joinButton: 'Join',
+        mainTitle: 'Video Call & Live Translate',
+        loggedInAs: 'Logged in as:',
+        myVideoTitle: 'My Video',
+        remoteVideoTitle: 'Remote Video',
+        disconnectButton: 'Disconnect Call',
+        incomingCallFrom: 'Incoming call from',
+        acceptButton: 'Accept',
+        callUserPlaceholder: 'Username to call',
+        callButton: 'Call',
+        myLanguageLabel: 'My Language:',
+        translateToLabel: 'Translate To:',
+        subtitlesTitle: 'Live Subtitles:',
+        subtitleYou: 'You',
+        alertPeerDisconnected: 'The other user has disconnected.',
+        alertEnterUserToCall: 'Please enter a user to call.',
+        alertWebRTCError: 'WebRTC connection error. See console for details.',
+        alertMediaError: 'Could not start call. Please ensure camera and microphone permissions are enabled.',
+    },
+    he: {
+        loginTitle: 'שיחת וידאו ותרגום',
+        loginSubtitle: 'בחר שם משתמש כדי להתחיל.',
+        usernamePlaceholder: 'הזן את שם המשתמש שלך',
+        joinButton: 'הצטרף',
+        mainTitle: 'שיחת וידאו ותרגום חי',
+        loggedInAs: 'מחובר/ת בתור:',
+        myVideoTitle: 'הווידאו שלי',
+        remoteVideoTitle: 'וידאו מרוחק',
+        disconnectButton: 'נתק שיחה',
+        incomingCallFrom: 'שיחה נכנסת מ',
+        acceptButton: 'קבל',
+        callUserPlaceholder: 'שם משתמש לחיוג',
+        callButton: 'חייג',
+        myLanguageLabel: 'השפה שלי:',
+        translateToLabel: 'תרגם ל:',
+        subtitlesTitle: 'כתוביות חיות:',
+        subtitleYou: 'אתה',
+        alertPeerDisconnected: 'המשתמש השני התנתק.',
+        alertEnterUserToCall: 'אנא הזן שם משתמש לחיוג.',
+        alertWebRTCError: 'שגיאת חיבור WebRTC. בדוק את הקונסול לפרטים.',
+        alertMediaError: 'לא ניתן להתחיל שיחה. אנא ודא שהרשאות המצלמה והמיקרופון מאופשרות.',
+    },
+    ru: {
+        loginTitle: 'Видеозвонок и перевод',
+        loginSubtitle: 'Выберите имя пользователя, чтобы начать.',
+        usernamePlaceholder: 'Введите ваше имя пользователя',
+        joinButton: 'Присоединиться',
+        mainTitle: 'Видеозвонок и живой перевод',
+        loggedInAs: 'Вы вошли как:',
+        myVideoTitle: 'Мое видео',
+        remoteVideoTitle: 'Удаленное видео',
+        disconnectButton: 'Завершить звонок',
+        incomingCallFrom: 'Входящий звонок от',
+        acceptButton: 'Принять',
+        callUserPlaceholder: 'Имя пользователя для звонка',
+        callButton: 'Позвонить',
+        myLanguageLabel: 'Мой язык:',
+        translateToLabel: 'Перевести на:',
+        subtitlesTitle: 'Живые субтитры:',
+        subtitleYou: 'Вы',
+        alertPeerDisconnected: 'Другой пользователь отключился.',
+        alertEnterUserToCall: 'Пожалуйста, введите имя пользователя для звонка.',
+        alertWebRTCError: 'Ошибка подключения WebRTC. Подробности в консоли.',
+        alertMediaError: 'Не удалось начать звонок. Убедитесь, что разрешения для камеры и микрофона предоставлены.',
+    },
+};
+// --- END UI Text Translations ---
+
 
 const SIGNALING_SERVER_URL = 'https://video-translate-api-6owl.onrender.com'; // Placeholder - UPDATE THIS AFTER BACKEND DEPLOYMENT
 
@@ -56,12 +130,11 @@ function App() {
     const [incomingCall, setIncomingCall] = useState(null);
     const [pendingCandidates, setPendingCandidates] = useState([]);
     const [subtitles, setSubtitles] = useState([]);
+    const [uiLanguage, setUiLanguage] = useState('en'); // 'en', 'he', 'ru'
 
     // Language selection states and options
     const [sourceLanguage, setSourceLanguage] = useState('en-US');
     const [targetLanguage, setTargetLanguage] = useState('es');
-    // Removed setSttSourceLanguages from here as it's now a constant:
-    // const [sttSourceLanguages, setSttSourceLanguages] = useState(['en-US', 'he-IL']);
 
 
     // List of supported languages for selection dropdowns
@@ -76,6 +149,8 @@ function App() {
         { code: 'ar', name: 'Arabic' },
         { code: 'ru', 'name': 'Russian' },
     ];
+
+    const t = uiTexts[uiLanguage]; // Helper for accessing translation strings
 
     const cleanupCall = useCallback(() => {
         console.log("Cleaning up call resources...");
@@ -155,7 +230,7 @@ function App() {
             });
         });
         socket.on('peerDisconnected', () => {
-            alert('The other user has disconnected.');
+            alert(t.alertPeerDisconnected);
             cleanupCall();
         });
         socket.on('disconnect', () => {
@@ -167,14 +242,13 @@ function App() {
             socket.disconnect();
             cleanupCall();
         };
-    }, [isLoggedIn, username, cleanupCall]);
+    }, [isLoggedIn, username, cleanupCall, t]);
 
     useEffect(() => {
         if (isLoggedIn && socketRef.current?.connected) {
-            // --- ESLint Fix: Using the constant STT_SOURCE_LANGUAGES ---
             socketRef.current.emit('updateLanguageSettings', { sourceLanguage, targetLanguage, sttSourceLanguages: STT_SOURCE_LANGUAGES });
         }
-    }, [sourceLanguage, targetLanguage, isLoggedIn]); // Removed sttSourceLanguages as it's a constant
+    }, [sourceLanguage, targetLanguage, isLoggedIn]);
 
     const createAudioProcessor = useCallback((stream, socket) => {
         const audioContext = new (window.AudioContext || window.webkitAudioContext)();
@@ -225,7 +299,6 @@ function App() {
             peerRef.current = peer;
             console.log(`[${username}] setupCall: Peer instance created. peerRef.current is:`, peerRef.current);
 
-
             peer.on('signal', (data) => {
                 console.log(`[${username}] Peer 'signal' event triggered. Type: ${data.type || 'candidate'}.`);
                 if (isInitiator) {
@@ -239,24 +312,16 @@ function App() {
 
             peer.on('track', (track, stream) => {
                 console.log(`[${username}] Received remote track: kind=${track.kind}, id=${track.id}, enabled=${track.enabled}`);
-                console.log(`[${username}] Stream associated with track: id=${stream.id}, active=${stream.active}, has video tracks=${stream.getVideoTracks().length > 0}, has audio tracks=${stream.getAudioTracks().length > 0}`);
                 if (remoteVideoRef.current) {
                     if (!remoteVideoRef.current.srcObject || remoteVideoRef.current.srcObject.id !== stream.id) {
                         remoteVideoRef.current.srcObject = stream;
-                        console.log(`[${username}] remoteVideoRef.current.srcObject set to new stream. Value:`, remoteVideoRef.current.srcObject);
-                    } else {
-                        console.log(`[${username}] remoteVideoRef.current.srcObject already set to this stream.`);
                     }
-                } else {
-                    console.warn(`[${username}] remoteVideoRef.current is null when 'track' event fired.`);
                 }
             });
 
             peer.on('stream', (remoteStream) => {
-                console.log(`[${username}] DEPRECATED 'stream' event fired. Remote stream received: id=${remoteStream.id}, active=${remoteStream.active}, has video tracks=${remoteStream.getVideoTracks().length > 0}, has audio tracks=${remoteStream.getAudioTracks().length > 0}`);
-                if (remoteVideoRef.current) {
+                 if (remoteVideoRef.current) {
                     remoteVideoRef.current.srcObject = remoteStream;
-                    console.log(`[${username}] remoteVideoRef.current.srcObject set from 'stream' event. Value:`, remoteVideoRef.current.srcObject);
                 }
             });
 
@@ -271,7 +336,7 @@ function App() {
             });
             peer.on('error', (err) => {
                 console.error(`[${username}] Peer 'error' event:`, err);
-                alert('WebRTC connection error. See console for details.');
+                alert(t.alertWebRTCError);
                 cleanupCall();
             });
 
@@ -281,21 +346,19 @@ function App() {
 
                 if (pendingCandidates.length > 0) {
                     console.log(`[${username}] setupCall: Applying ${pendingCandidates.length} pending candidates.`);
-                    pendingCandidates.forEach(candidate => {
-                        peer.signal(candidate);
-                    });
+                    pendingCandidates.forEach(candidate => peer.signal(candidate));
                     setPendingCandidates([]);
                 }
             }
         } catch (err) {
             console.error(`[${username}] Failed to get media stream in setupCall:`, err);
-            alert('Could not start call. Please ensure camera and microphone permissions are enabled.');
+            alert(t.alertMediaError);
             cleanupCall();
         }
     };
 
     const handleCallUser = () => {
-        if (!remoteUser) return alert('Please enter a user to call.');
+        if (!remoteUser) return alert(t.alertEnterUserToCall);
         setCallStatus('calling');
         setupCall(true);
     };
@@ -319,74 +382,45 @@ function App() {
 
     useEffect(() => {
         const videoElement = remoteVideoRef.current;
-        const remoteStream = videoElement ? videoElement.srcObject : null;
-
-        console.log(`[${username}] useEffect [remoteVideoRef.current, username] triggered. videoElement:`, videoElement, `remoteStream:`, remoteStream);
-
-        if (videoElement && remoteStream) {
-            console.log(`[${username}] useEffect: remoteVideoRef.current.srcObject changed and is valid. Attempting playback.`);
-
-            const attemptPlay = () => {
-                console.log(`[${username}] Attempting play. Video readyState: ${videoElement.readyState}, paused: ${videoElement.paused}`);
-                if (videoElement.readyState >= 2) {
-                    videoElement.play()
-                        .then(() => {
-                            console.log(`[${username}] Remote video playback started successfully.`);
-                        })
-                        .catch(e => {
-                            console.error(`[${username}] Error playing remote video:`, e);
-                            if (e.name === "NotAllowedError" && !videoElement.muted) {
-                                console.warn(`[${username}] Autoplay blocked. Trying muted playback.`);
-                                videoElement.muted = true;
-                                videoElement.play().catch(e2 => console.error(`[${username}] Error playing muted video:`, e2));
-                            }
-                        });
-                } else {
-                    console.log(`[${username}] Video not ready yet (readyState: ${videoElement.readyState}). Retrying in 100ms.`);
-                    setTimeout(attemptPlay, 100);
-                }
-            };
-
-            const onLoadedMetadata = () => {
-                console.log(`[${username}] remoteVideoRef.current loadedmetadata event fired. Video readyState: ${videoElement.readyState}`);
-                attemptPlay();
-            };
-
-            videoElement.addEventListener('loadedmetadata', onLoadedMetadata);
-
-            if (videoElement.readyState >= 2) {
-                console.log(`[${username}] Video already has metadata. Proceeding to immediate play attempt.`);
-                attemptPlay();
+        if (videoElement && videoElement.srcObject) {
+            const playPromise = videoElement.play();
+            if (playPromise !== undefined) {
+                playPromise.catch(error => {
+                    console.error("Autoplay was prevented:", error);
+                    videoElement.muted = true;
+                    videoElement.play();
+                });
             }
-
-            return () => {
-                console.log(`[${username}] Cleaning up loadedmetadata listener.`);
-                if (videoElement) {
-                    videoElement.removeEventListener('loadedmetadata', onLoadedMetadata);
-                }
-            };
-        } else {
-            console.log(`[${username}] useEffect: remoteVideoRef.current or srcObject is null. No playback attempt.`);
         }
-    }, [username]); // --- ESLint Fix: Removed remoteVideoRef.current from dependencies ---
+    }, [remoteVideoRef.current?.srcObject]);
 
 
     if (!isLoggedIn) {
         return (
-            <div className="login-container">
+            <div className="login-container" dir={uiLanguage === 'he' ? 'rtl' : 'ltr'}>
                 <style>{`
-                    .login-container { display: flex; justify-content: center; align-items: center; height: 100vh; background-color: #f0f2f5; }
+                    .login-container { display: flex; flex-direction: column; justify-content: center; align-items: center; height: 100vh; background-color: #f0f2f5; }
+                    .ui-language-selection { position: absolute; top: 20px; right: 20px; }
+                    .ui-language-selection[dir="rtl"] { right: auto; left: 20px; }
+                    .ui-language-selection select { padding: 8px; border-radius: 4px; border: 1px solid #ccc; }
                     form { background: white; padding: 40px; border-radius: 12px; box-shadow: 0 8px 16px rgba(0,0,0,0.1); text-align: center; }
                     h1 { margin-bottom: 10px; } p { margin-bottom: 20px; color: #666; }
                     input { font-size: 1em; padding: 10px; width: 250px; margin-bottom: 20px; border: 1px solid #ccc; border-radius: 8px; }
                     button { font-size: 1.1em; padding: 10px 20px; border: none; border-radius: 8px; background-color: #007bff; color: white; cursor: pointer; }
                     .error { color: red; margin-top: 15px; }
                 `}</style>
+                 <div className="ui-language-selection" dir={uiLanguage === 'he' ? 'rtl' : 'ltr'}>
+                    <select value={uiLanguage} onChange={(e) => setUiLanguage(e.target.value)}>
+                        <option value="en">English</option>
+                        <option value="he">עברית</option>
+                        <option value="ru">Русский</option>
+                    </select>
+                </div>
                 <form onSubmit={handleLogin}>
-                    <h1>Video Call & Translate</h1>
-                    <p>Choose a username to begin.</p>
-                    <input type="text" placeholder="Enter your username" value={usernameToRegister} onChange={(e) => setUsernameToRegister(e.target.value)} autoFocus />
-                    <button type="submit">Join</button>
+                    <h1>{t.loginTitle}</h1>
+                    <p>{t.loginSubtitle}</p>
+                    <input type="text" placeholder={t.usernamePlaceholder} value={usernameToRegister} onChange={(e) => setUsernameToRegister(e.target.value)} autoFocus />
+                    <button type="submit">{t.joinButton}</button>
                     {loginError && <p className="error">{loginError}</p>}
                 </form>
             </div>
@@ -398,29 +432,33 @@ function App() {
             case 'active':
             case 'calling':
             case 'connecting':
-                return <button onClick={() => disconnectCall(true)} className="disconnect-btn">Disconnect Call</button>;
+                return <button onClick={() => disconnectCall(true)} className="disconnect-btn">{t.disconnectButton}</button>;
             case 'receiving':
                 return (
                     <div className="incoming-call">
-                        <p>Incoming call from <strong>{incomingCall.from}</strong>!</p>
-                        <button onClick={handleAcceptCall} className="accept-btn">Accept</button>
+                        <p>{t.incomingCallFrom} <strong>{incomingCall.from}</strong>!</p>
+                        <button onClick={handleAcceptCall} className="accept-btn">{t.acceptButton}</button>
                     </div>
                 );
             case 'idle':
             default:
                 return (
                     <div className="call-controls">
-                        <input type="text" placeholder="Username to call" value={remoteUser} onChange={(e) => setRemoteUser(e.target.value)} />
-                        <button onClick={handleCallUser} className="call-btn">Call</button>
+                        <input type="text" placeholder={t.callUserPlaceholder} value={remoteUser} onChange={(e) => setRemoteUser(e.target.value)} />
+                        <button onClick={handleCallUser} className="call-btn">{t.callButton}</button>
                     </div>
                 );
         }
     };
 
     return (
-        <div className="App">
+        <div className="App" dir={uiLanguage === 'he' ? 'rtl' : 'ltr'}>
             <style>{`
                 .App { text-align: center; font-family: sans-serif; padding: 20px; background-color: #f0f2f5; }
+                .header { position: relative; }
+                .ui-language-selection { position: absolute; top: 0; right: 0; }
+                .App[dir="rtl"] .ui-language-selection { right: auto; left: 0; }
+                .ui-language-selection select { padding: 8px; border-radius: 4px; border: 1px solid #ccc; }
                 .video-container { display: flex; flex-wrap: wrap; justify-content: center; gap: 20px; margin: 20px 0; }
                 .video-box { background: #fff; padding: 10px; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); width: 100%; max-width: 500px; }
                 video { width: 100%; background: #000; border-radius: 4px; aspect-ratio: 4 / 3; object-fit: cover; }
@@ -431,20 +469,29 @@ function App() {
                 .disconnect-btn { background-color: #dc3545; }
                 .incoming-call { margin-top: 15px; padding: 10px; background-color: #fff3cd; border: 1px solid #ffeeba; border-radius: 4px; }
                 .accept-btn { background-color: #007bff; }
-                .subtitle-container { margin: 20px auto; padding: 20px; background: #fff; border-radius: 8px; max-width: 800px; min-height: 100px; text-align: left; }
+                .subtitle-container { margin: 20px auto; padding: 20px; background: #fff; border-radius: 8px; max-width: 800px; min-height: 100px; text-align: start; }
                 .final-subtitle { color: #333; }
                 .interim-subtitle { color: #888; font-style: italic; }
             `}</style>
-            <h1>Video Call & Live Translate</h1>
-            <p>Logged in as: <strong>{username}</strong></p>
+            <div className="header">
+                <h1>{t.mainTitle}</h1>
+                <div className="ui-language-selection">
+                    <select value={uiLanguage} onChange={(e) => setUiLanguage(e.target.value)}>
+                        <option value="en">English</option>
+                        <option value="he">עברית</option>
+                        <option value="ru">Русский</option>
+                    </select>
+                </div>
+            </div>
+            <p>{t.loggedInAs} <strong>{username}</strong></p>
 
             <div className="video-container">
                 <div className="video-box">
-                    <h2>My Video</h2>
+                    <h2>{t.myVideoTitle}</h2>
                     <video ref={localVideoRef} autoPlay muted playsInline />
                 </div>
                 <div className="video-box">
-                    <h2>Remote Video ({remoteUser || '...'})</h2>
+                    <h2>{t.remoteVideoTitle} ({remoteUser || '...'})</h2>
                     <video ref={remoteVideoRef} autoPlay playsInline />
                 </div>
             </div>
@@ -454,21 +501,21 @@ function App() {
             </div>
             
             <div className="controls-container language-selection">
-                <label>My Language:</label>
+                <label>{t.myLanguageLabel}</label>
                 <select value={sourceLanguage} onChange={(e) => setSourceLanguage(e.target.value)}>
                     {languages.map(l => <option key={l.code} value={l.code}>{l.name}</option>)}
                 </select>
-                <label>Translate To:</label>
+                <label>{t.translateToLabel}</label>
                 <select value={targetLanguage} onChange={(e) => setTargetLanguage(e.target.value)}>
                     {languages.map(l => <option key={l.code} value={l.code}>{l.name}</option>)}
                 </select>
             </div>
 
             <div className="subtitle-container">
-                <h3>Live Subtitles:</h3>
+                <h3>{t.subtitlesTitle}</h3>
                 {subtitles.map((sub, index) => (
                     <p key={index} className={sub.isFinal ? 'final-subtitle' : 'interim-subtitle'}>
-                        <strong>{sub.speakerId === username ? 'You' : sub.speakerId}:</strong> {sub.text}
+                        <strong>{sub.speakerId === username ? t.subtitleYou : sub.speakerId}:</strong> {sub.text}
                     </p>
                 ))}
             </div>
