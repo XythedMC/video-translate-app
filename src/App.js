@@ -43,9 +43,11 @@ const uiTexts = {
         subtitleYou: 'You',
         switchCameraButton: 'Switch Camera',
         alertPeerDisconnected: 'The other user has disconnected.',
-        alertEnterUserToCall: 'Please enter a user to call.',
-        alertWebRTCError: 'WebRTC connection error. See console for details.',
-        alertMediaError: 'Could not start call. Please ensure camera and microphone permissions are enabled.',
+        alertEnterUserToCall: 'Please enter a username to call.',
+        alertWebRTCError: 'WebRTC connection failed. This could be due to a network issue or firewall configuration. Please check the console for details.',
+        alertMediaError: 'Could not start your camera or microphone. Please ensure you have granted camera and microphone permissions to this site in your browser settings.',
+        alertUserNotOnline: (user) => `The user "${user}" is not online or could not be found.`,
+        alertCameraSwitchFailed: 'Could not switch camera. Please ensure the new camera is not in use by another application and that browser permissions are granted.',
     },
     he: {
         loginTitle: 'שיחת וידאו ותרגום',
@@ -68,8 +70,10 @@ const uiTexts = {
         switchCameraButton: 'החלף מצלמה',
         alertPeerDisconnected: 'המשתמש השני התנתק.',
         alertEnterUserToCall: 'אנא הזן שם משתמש לחיוג.',
-        alertWebRTCError: 'שגיאת חיבור WebRTC. בדוק את הקונסול לפרטים.',
-        alertMediaError: 'לא ניתן להתחיל שיחה. אנא ודא שהרשאות המצלמה והמיקרופון מאופשרות.',
+        alertWebRTCError: 'חיבור WebRTC נכשל. ייתכן שמדובר בבעיית רשת או חומת אש. אנא בדוק את הקונסול לפרטים.',
+        alertMediaError: 'לא ניתן להפעיל את המצלמה או המיקרופון. אנא ודא שהענקת הרשאות מצלמה ומיקרופון לאתר זה בהגדרות הדפדפן שלך.',
+        alertUserNotOnline: (user) => `המשתמש "${user}" אינו מחובר או שלא ניתן למצוא אותו.`,
+        alertCameraSwitchFailed: 'לא ניתן היה להחליף מצלמה. אנא ודא שהמצלמה החדשה אינה בשימוש על ידי יישום אחר ושהרשאות הדפדפן ניתנו.',
     },
     ru: {
         loginTitle: 'Видеозвонок и перевод',
@@ -92,8 +96,10 @@ const uiTexts = {
         switchCameraButton: 'Переключить камеру',
         alertPeerDisconnected: 'Другой пользователь отключился.',
         alertEnterUserToCall: 'Пожалуйста, введите имя пользователя для звонка.',
-        alertWebRTCError: 'Ошибка подключения WebRTC. Подробности в консоли.',
-        alertMediaError: 'Не удалось начать звонок. Убедитесь, что разрешения для камеры и микрофона предоставлены.',
+        alertWebRTCError: 'Сбой подключения WebRTC. Это может быть связано с проблемой в сети или конфигурацией брандмауэра. Пожалуйста, проверьте консоль для получения подробной информации.',
+        alertMediaError: 'Не удалось запустить камеру или микрофон. Убедитесь, что вы предоставили разрешения на доступ к камере и микрофону для этого сайта в настройках вашего браузера.',
+        alertUserNotOnline: (user) => `Пользователь "${user}" не в сети или не может быть найден.`,
+        alertCameraSwitchFailed: 'Не удалось переключить камеру. Убедитесь, что новая камера не используется другим приложением и что предоставлены разрешения браузера.',
     },
 };
 // --- END UI Text Translations ---
@@ -110,7 +116,7 @@ const ICE_SERVERS = [
     { urls: 'stun:stun4.l.google.com:19302' },
 ];
 
-const STT_SOURCE_LANGUAGES = ['en-US', 'he-IL'];
+const STT_SOURCE_LANGUAGES = ['en-US', 'he-IL', 'ru-RU'];
 
 
 function App() {
@@ -143,7 +149,7 @@ function App() {
         { code: 'fr', name: 'French' }, { code: 'de', name: 'German' },
         { code: 'he-IL', name: 'Hebrew (Israel)' }, { code: 'ja', name: 'Japanese' },
         { code: 'zh-CN', name: 'Chinese (Mandarin)' }, { code: 'ar', name: 'Arabic' },
-        { code: 'ru', 'name': 'Russian' },
+        { code: 'ru-RU', 'name': 'Russian' },
     ];
 
     const t = uiTexts[uiLanguage];
@@ -228,6 +234,10 @@ function App() {
                 setCallStatus('active');
                 setRemoteUser(from);
             }
+        });
+        socket.on('callFailed', ({ message, user }) => {
+            alert(t.alertUserNotOnline(user));
+            setCallStatus('idle');
         });
         socket.on('liveSubtitle', (data) => {
             setSubtitles(prev => {
@@ -377,7 +387,7 @@ function App() {
             // Update the local video element to show the new camera feed immediately
             if (localVideoRef.current) {
                 // Create a temporary stream for local display
-                const displayStream = new MediaStream([newVideoTrack]);
+                const displayStream = new MediaStream([newVideoTrack, ...localStreamRef.current.getAudioTracks()]);
                 localVideoRef.current.srcObject = displayStream;
             }
             
@@ -399,10 +409,9 @@ function App() {
 
         } catch (err) {
             console.error('Error switching camera:', err);
-            // This alert is what you are likely seeing
-            alert('Could not switch camera. Please check browser permissions.');
+            alert(t.alertCameraSwitchFailed);
         }
-    }, [videoDevices, currentCameraIndex]);
+    }, [videoDevices, currentCameraIndex, t.alertCameraSwitchFailed]);
 
     const handleCallUser = () => {
         if (!remoteUser) return alert(t.alertEnterUserToCall);
