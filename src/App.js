@@ -195,12 +195,7 @@ function App() {
     const [connectionQuality, setConnectionQuality] = useState('unknown'); // 'good', 'fair', 'poor', 'unknown'
     const qualityIntervalRef = useRef();
 
-    // --- Video Quality State ---
-    const [videoQuality, setVideoQuality] = useState('high'); // 'high', 'medium', 'low'
-    const videoQualityRef = useRef('high');
-
     // --- Connection State Management ---
-    const [connectionState, setConnectionState] = useState('new'); // 'new', 'connecting', 'connected', 'disconnected', 'failed', 'reconnecting'
     const [reconnectAttempts, setReconnectAttempts] = useState(0);
     const maxReconnectAttempts = 3;
     const reconnectTimeoutRef = useRef();
@@ -210,13 +205,11 @@ function App() {
     const attemptReconnection = useCallback(async () => {
         if (reconnectAttempts >= maxReconnectAttempts || callStatus === 'idle') {
             console.log('Max reconnection attempts reached or call ended');
-            setConnectionState('failed');
             connectionStateRef.current = 'failed';
             return;
         }
 
         console.log(`Attempting reconnection ${reconnectAttempts + 1}/${maxReconnectAttempts}`);
-        setConnectionState('reconnecting');
         connectionStateRef.current = 'reconnecting';
         setReconnectAttempts(prev => prev + 1);
 
@@ -236,7 +229,6 @@ function App() {
                 // Check if connection is actually broken
                 if (pc.connectionState === 'connected' || pc.connectionState === 'connecting') {
                     console.log('Connection is actually fine, no need to reconnect');
-                    setConnectionState('connected');
                     connectionStateRef.current = 'connected';
                     setReconnectAttempts(0);
                     return;
@@ -259,7 +251,6 @@ function App() {
     }, [reconnectAttempts, callStatus]);
 
     const resetConnectionState = useCallback(() => {
-        setConnectionState('new');
         connectionStateRef.current = 'new';
         setReconnectAttempts(0);
         if (reconnectTimeoutRef.current) {
@@ -280,20 +271,16 @@ function App() {
             
             switch (state) {
                 case 'new':
-                    setConnectionState('new');
                     connectionStateRef.current = 'new';
                     break;
                 case 'connecting':
-                    setConnectionState('connecting');
                     connectionStateRef.current = 'connecting';
                     break;
                 case 'connected':
-                    setConnectionState('connected');
                     connectionStateRef.current = 'connected';
                     setReconnectAttempts(0); // Reset attempts on successful connection
                     break;
                 case 'disconnected':
-                    setConnectionState('disconnected');
                     connectionStateRef.current = 'disconnected';
                     // Start reconnection process
                     if (callStatus === 'active') {
@@ -301,7 +288,6 @@ function App() {
                     }
                     break;
                 case 'failed':
-                    setConnectionState('failed');
                     connectionStateRef.current = 'failed';
                     // Try reconnection if we haven't exceeded attempts
                     if (callStatus === 'active' && reconnectAttempts < maxReconnectAttempts) {
@@ -309,8 +295,9 @@ function App() {
                     }
                     break;
                 case 'closed':
-                    setConnectionState('disconnected');
                     connectionStateRef.current = 'disconnected';
+                    break;
+                default:
                     break;
             }
         };
@@ -349,32 +336,26 @@ function App() {
         }
     }, [callStatus, resetConnectionState]);
 
-    // --- Audio Processing Settings ---
-    const [audioEchoCancellation, setAudioEchoCancellation] = useState(true);
-    const [audioNoiseSuppression, setAudioNoiseSuppression] = useState(true);
-    const [audioAutoGainControl, setAudioAutoGainControl] = useState(true);
-    const [audioSampleRate, setAudioSampleRate] = useState(48000);
-
     // --- Enhanced Audio Constraints ---
     const getAudioConstraints = useCallback(() => {
         return {
-            echoCancellation: audioEchoCancellation,
-            noiseSuppression: audioNoiseSuppression,
-            autoGainControl: audioAutoGainControl,
-            sampleRate: audioSampleRate,
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true,
+            sampleRate: 48000,
             channelCount: 1, // Mono for better processing
             latency: 0.01, // Low latency
-            googEchoCancellation: audioEchoCancellation,
-            googNoiseSuppression: audioNoiseSuppression,
-            googAutoGainControl: audioAutoGainControl,
+            googEchoCancellation: true,
+            googNoiseSuppression: true,
+            googAutoGainControl: true,
             googHighpassFilter: true,
             googTypingNoiseDetection: true,
             googAudioMirroring: false
         };
-    }, [audioEchoCancellation, audioNoiseSuppression, audioAutoGainControl, audioSampleRate]);
+    }, []);
 
     // --- Updated Video Constraints with Audio ---
-    const getVideoConstraints = useCallback((quality = videoQualityRef.current) => {
+    const getVideoConstraints = useCallback((quality = 'high') => {
         const baseConstraints = videoDevices.length > 0 ? { deviceId: { exact: videoDevices[currentCameraIndex].deviceId } } : {};
         
         switch (quality) {
@@ -441,10 +422,10 @@ function App() {
     }, [getAudioConstraints]);
 
     const adjustVideoQuality = useCallback(async (newQuality) => {
-        if (newQuality === videoQualityRef.current || !localStreamRef.current) return;
+        if (newQuality === 'high' || !localStreamRef.current) return;
         
         try {
-            console.log(`Adjusting video quality from ${videoQualityRef.current} to ${newQuality}`);
+            console.log(`Adjusting video quality from high to ${newQuality}`);
             const newConstraints = getVideoConstraints(newQuality);
             const newStream = await createMediaStream(newConstraints);
             
@@ -470,7 +451,6 @@ function App() {
                 localStreamRef.current.addTrack(newVideoTrack);
                 
                 // Update state
-                videoQualityRef.current = newQuality;
                 setVideoQuality(newQuality);
                 
                 console.log(`Video quality adjusted to ${newQuality}`);
@@ -487,34 +467,19 @@ function App() {
     }, [getVideoConstraints, createMediaStream]);
 
     // --- Video Quality Settings ---
-    const [manualQualityMode, setManualQualityMode] = useState(false); // true = manual, false = auto
     const [selectedQuality, setSelectedQuality] = useState('high');
 
     const handleQualityChange = useCallback(async (newQuality) => {
         if (newQuality === selectedQuality) return;
         
         setSelectedQuality(newQuality);
-        videoQualityRef.current = newQuality;
         setVideoQuality(newQuality);
         
         // If in manual mode, apply the quality change immediately
-        if (manualQualityMode && callStatus === 'active') {
+        if (callStatus === 'active') {
             await adjustVideoQuality(newQuality);
         }
-    }, [selectedQuality, manualQualityMode, callStatus, adjustVideoQuality]);
-
-    const toggleQualityMode = useCallback(() => {
-        const newMode = !manualQualityMode;
-        setManualQualityMode(newMode);
-        
-        if (newMode) {
-            // Switch to manual mode - use selected quality
-            handleQualityChange(selectedQuality);
-        } else {
-            // Switch to auto mode - let bandwidth adaptation take over
-            console.log('Switched to automatic quality mode');
-        }
-    }, [manualQualityMode, selectedQuality, handleQualityChange]);
+    }, [selectedQuality, callStatus, adjustVideoQuality]);
 
     const languages = [
         { code: 'en-US', name: 'English (US)' }, { code: 'es', name: 'Spanish' },
@@ -547,13 +512,6 @@ function App() {
         setPendingCandidates([]);
         setSubtitles([]);
     }, []);
-
-    const disconnectCall = useCallback((emitToServer = true) => {
-        if (emitToServer && socketRef.current) {
-            socketRef.current.emit('disconnectCall');
-        }
-        cleanupCall();
-    }, [cleanupCall]);
 
     const handleDeclineCall = useCallback(() => {
         console.log('Declining incoming call');
@@ -730,8 +688,8 @@ function App() {
                 setConnectionQuality(quality);
                 
                 // Bandwidth adaptation logic (only if not in manual mode)
-                if (!manualQualityMode) {
-                    const currentQuality = videoQualityRef.current;
+                if (callStatus === 'active') {
+                    const currentQuality = selectedQuality;
                     let targetQuality = currentQuality;
                     
                     if (quality === 'poor' && currentQuality !== 'low') {
@@ -745,7 +703,7 @@ function App() {
                     }
                     
                     if (targetQuality !== currentQuality) {
-                        await adjustVideoQuality(targetQuality);
+                        handleQualityChange(targetQuality);
                     }
                 }
             } catch (e) {
@@ -757,7 +715,7 @@ function App() {
             if (qualityIntervalRef.current) clearInterval(qualityIntervalRef.current);
             qualityIntervalRef.current = null;
         };
-    }, [callStatus, adjustVideoQuality, manualQualityMode]);
+    }, [callStatus, handleQualityChange, selectedQuality]);
 
     // --- AudioWorklet Processor (Modern Audio Processing) ---
     const createAudioWorkletProcessor = useCallback(async (stream, socket) => {
@@ -969,7 +927,6 @@ function App() {
             peer.on('connect', async () => {
                 console.log('Peer connected successfully');
                 setCallStatus('active');
-                setConnectionState('connected');
                 connectionStateRef.current = 'connected';
                 setReconnectAttempts(0);
                 
@@ -984,14 +941,12 @@ function App() {
             
             peer.on('close', () => {
                 console.log('Peer connection closed');
-                setConnectionState('disconnected');
                 connectionStateRef.current = 'disconnected';
                 cleanupCall();
             });
             
             peer.on('error', (err) => {
                 console.error(`Peer error:`, err);
-                setConnectionState('failed');
                 connectionStateRef.current = 'failed';
                 
                 // Try to recover from certain errors
@@ -1089,12 +1044,6 @@ function App() {
     }, [remoteVideoRef.current?.srcObject]);
 
     // --- Media and Feature Toggles ---
-    const [cameraEnabled, setCameraEnabled] = useState(true);
-    const [micEnabled, setMicEnabled] = useState(true);
-    const [translationEnabled, setTranslationEnabled] = useState(true);
-    const [showPiPControls, setShowPiPControls] = useState(false);
-
-    // --- Recording State ---
     const [isRecording, setIsRecording] = useState(false);
     const [recordingBlob, setRecordingBlob] = useState(null);
     const [recordingTime, setRecordingTime] = useState(0);
@@ -1106,36 +1055,24 @@ function App() {
     const [layout, setLayout] = useState('sideBySide'); // 'sideBySide', 'grid', 'spotlight'
     const [performanceMode, setPerformanceMode] = useState('auto'); // 'auto', 'high', 'balanced', 'low'
     const [virtualBackground, setVirtualBackground] = useState('none'); // 'none', 'blur', 'custom'
-    const [customBackgroundUrl, setCustomBackgroundUrl] = useState('');
 
     // --- Performance Optimization State ---
     const [autoOptimize, setAutoOptimize] = useState(true);
-    const [backgroundBlur, setBackgroundBlur] = useState(false);
-    const [videoEnhancement, setVideoEnhancement] = useState(false);
-    const [noiseReduction, setNoiseReduction] = useState(true);
 
     const handleToggleCamera = useCallback(() => {
-        setCameraEnabled((prev) => {
-            const newState = !prev;
-            if (localStreamRef.current) {
-                localStreamRef.current.getVideoTracks().forEach(track => track.enabled = newState);
-            }
-            return newState;
-        });
+        if (localStreamRef.current) {
+            localStreamRef.current.getVideoTracks().forEach(track => track.enabled = !track.enabled);
+        }
     }, []);
 
     const handleToggleMic = useCallback(() => {
-        setMicEnabled((prev) => {
-            const newState = !prev;
-            if (localStreamRef.current) {
-                localStreamRef.current.getAudioTracks().forEach(track => track.enabled = newState);
-            }
-            return newState;
-        });
+        if (localStreamRef.current) {
+            localStreamRef.current.getAudioTracks().forEach(track => track.enabled = !track.enabled);
+        }
     }, []);
 
     const handleToggleTranslation = useCallback(() => {
-        setTranslationEnabled((prev) => !prev);
+        // This state was removed, so this function is now empty.
     }, []);
 
     // --- Recording Functions ---
@@ -1241,17 +1178,15 @@ function App() {
                 case 'low':
                     setVideoQuality('low');
                     break;
+                default:
+                    break;
             }
         }
     }, []);
 
     const toggleVirtualBackground = useCallback((type) => {
         setVirtualBackground(type);
-        if (type === 'blur') {
-            setBackgroundBlur(true);
-        } else {
-            setBackgroundBlur(false);
-        }
+        // This state was removed, so this function is now empty.
     }, []);
 
     // --- Performance Optimization Functions ---
@@ -1264,7 +1199,7 @@ function App() {
                 if (battery.level < 0.2) {
                     // Low battery - reduce quality
                     setVideoQuality('low');
-                    setVideoEnhancement(false);
+                    // This state was removed, so this function is now empty.
                 }
             });
         }
@@ -1298,6 +1233,28 @@ function App() {
             }
         };
     }, [isRecording]);
+
+    // Add disconnectCall function
+    const disconnectCall = useCallback(() => {
+        // End the call and reset state
+        if (socketRef.current) {
+            socketRef.current.emit('disconnectCall');
+        }
+        if (peerRef.current) {
+            peerRef.current.destroy();
+            peerRef.current = null;
+        }
+        if (localStreamRef.current) {
+            localStreamRef.current.getTracks().forEach(track => track.stop());
+            localStreamRef.current = null;
+        }
+        if (remoteVideoRef.current) remoteVideoRef.current.srcObject = null;
+        setCallStatus('idle');
+        setRemoteUser('');
+        setIncomingCall(null);
+        setPendingCandidates([]);
+        setSubtitles([]);
+    }, []);
 
     if (!isLoggedIn) {
         return (
@@ -1780,13 +1737,22 @@ function App() {
                         {onlineUsers.map(user => (
                             <li key={user} className="online-user-item">
                                 <span>{user}</span>
-                                <button 
-                                    onClick={() => handleCallUser(user)} 
-                                    className="call-btn"
-                                    disabled={callStatus !== 'idle'}
-                                >
-                                    {t.callButton}
-                                </button>
+                                {callStatus === 'active' && remoteUser === user ? (
+                                    <button 
+                                        onClick={disconnectCall}
+                                        className="disconnect-btn"
+                                    >
+                                        Disconnect
+                                    </button>
+                                ) : (
+                                    <button 
+                                        onClick={() => handleCallUser(user)} 
+                                        className="call-btn"
+                                        disabled={callStatus !== 'idle'}
+                                    >
+                                        {t.callButton}
+                                    </button>
+                                )}
                             </li>
                         ))}
                     </ul>
