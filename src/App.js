@@ -450,9 +450,6 @@ function App() {
                 localStreamRef.current.removeTrack(oldVideoTrack);
                 localStreamRef.current.addTrack(newVideoTrack);
                 
-                // Update state
-                setVideoQuality(newQuality);
-                
                 console.log(`Video quality adjusted to ${newQuality}`);
             }
             
@@ -473,7 +470,6 @@ function App() {
         if (newQuality === selectedQuality) return;
         
         setSelectedQuality(newQuality);
-        setVideoQuality(newQuality);
         
         // If in manual mode, apply the quality change immediately
         if (callStatus === 'active') {
@@ -1157,70 +1153,6 @@ function App() {
         setTheme(prev => prev === 'light' ? 'dark' : 'light');
     }, []);
 
-    const changeLayout = useCallback((newLayout) => {
-        setLayout(newLayout);
-    }, []);
-
-    const changePerformanceMode = useCallback((mode) => {
-        setPerformanceMode(mode);
-        if (mode === 'auto') {
-            setAutoOptimize(true);
-        } else {
-            setAutoOptimize(false);
-            // Apply specific quality settings based on mode
-            switch (mode) {
-                case 'high':
-                    setVideoQuality('high');
-                    break;
-                case 'balanced':
-                    setVideoQuality('medium');
-                    break;
-                case 'low':
-                    setVideoQuality('low');
-                    break;
-                default:
-                    break;
-            }
-        }
-    }, []);
-
-    const toggleVirtualBackground = useCallback((type) => {
-        setVirtualBackground(type);
-        // This state was removed, so this function is now empty.
-    }, []);
-
-    // --- Performance Optimization Functions ---
-    const applyPerformanceOptimizations = useCallback(() => {
-        if (!autoOptimize) return;
-        
-        // Monitor system performance and adjust settings
-        if ('getBattery' in navigator) {
-            navigator.getBattery().then(battery => {
-                if (battery.level < 0.2) {
-                    // Low battery - reduce quality
-                    setVideoQuality('low');
-                    // This state was removed, so this function is now empty.
-                }
-            });
-        }
-        
-        // Monitor memory usage
-        if ('memory' in performance) {
-            const memory = performance.memory;
-            if (memory.usedJSHeapSize > memory.jsHeapSizeLimit * 0.8) {
-                // High memory usage - reduce quality
-                setVideoQuality('low');
-            }
-        }
-    }, [autoOptimize]);
-
-    // Apply optimizations periodically
-    useEffect(() => {
-        if (autoOptimize && callStatus === 'active') {
-            const interval = setInterval(applyPerformanceOptimizations, 10000);
-            return () => clearInterval(interval);
-        }
-    }, [autoOptimize, callStatus, applyPerformanceOptimizations]);
 
     // Cleanup recording on unmount
     useEffect(() => {
