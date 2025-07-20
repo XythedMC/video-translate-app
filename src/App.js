@@ -49,18 +49,9 @@ const uiTexts = {
         recording: 'Recording...',
         downloadRecording: 'Download Recording',
         themeToggle: 'Toggle Theme',
-        performanceMode: 'Performance Mode',
-        highQuality: 'High Quality',
-        balanced: 'Balanced',
-        lowBandwidth: 'Low Bandwidth',
-        autoOptimize: 'Auto Optimize',
         layoutGrid: 'Grid Layout',
         layoutSpotlight: 'Spotlight Layout',
         layoutSideBySide: 'Side by Side',
-        virtualBackground: 'Virtual Background',
-        blurBackground: 'Blur Background',
-        noBackground: 'No Background',
-        customBackground: 'Custom Background',
     },
     he: {
         loginTitle: 'שיחת וידאו ותרגום',
@@ -94,11 +85,6 @@ const uiTexts = {
         recording: 'מקליט...',
         downloadRecording: 'הורד הקלטה',
         themeToggle: 'החלף ערכת נושא',
-        performanceMode: 'מצב ביצועים',
-        highQuality: 'איכות גבוהה',
-        balanced: 'מאוזן',
-        lowBandwidth: 'רוחב פס נמוך',
-        autoOptimize: 'אופטימיזציה אוטומטית',
         layoutGrid: 'פריסת רשת',
         layoutSpotlight: 'פריסת זרקור',
         layoutSideBySide: 'צד לצד',
@@ -139,11 +125,6 @@ const uiTexts = {
         recording: 'Запись...',
         downloadRecording: 'Скачать запись',
         themeToggle: 'Переключить тему',
-        performanceMode: 'Режим производительности',
-        highQuality: 'Высокое качество',
-        balanced: 'Сбалансированный',
-        lowBandwidth: 'Низкая пропускная способность',
-        autoOptimize: 'Автооптимизация',
         layoutGrid: 'Сетка',
         layoutSpotlight: 'Прожектор',
         layoutSideBySide: 'Рядом',
@@ -327,7 +308,7 @@ function App() {
             pc.removeEventListener('connectionstatechange', handleConnectionStateChange);
             pc.removeEventListener('iceconnectionstatechange', handleIceConnectionStateChange);
         };
-    }, [peerRef.current, callStatus, attemptReconnection]);
+    }, [callStatus, attemptReconnection, reconnectAttempts]);
 
     // --- Cleanup on call end ---
     useEffect(() => {
@@ -635,7 +616,7 @@ function App() {
             socket.disconnect();
             cleanupCall();
         };
-    }, [isLoggedIn, username, cleanupCall, t]);
+    }, [isLoggedIn, username, cleanupCall, t, callStatus]);
 
     useEffect(() => {
         if (isLoggedIn && socketRef.current?.connected) {
@@ -712,6 +693,69 @@ function App() {
             qualityIntervalRef.current = null;
         };
     }, [callStatus, handleQualityChange, selectedQuality]);
+
+    // --- ScriptProcessor Fallback (for older browsers) ---
+    const createScriptProcessorFallback = useCallback(async (stream, socket) => {
+        try {
+            const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            
+            // Resume audio context if it's suspended
+            if (audioContext.state === 'suspended') {
+                await audioContext.resume();
+            }
+            
+            const sampleRate = audioContext.sampleRate;
+            const source = audioContext.createMediaStreamSource(stream);
+            const processor = audioContext.createScriptProcessor(4096, 1, 1);
+            
+            let isProcessing = false;
+            
+            processor.onaudioprocess = (event) => {
+                if (isProcessing) return; // Prevent overlapping processing
+                isProcessing = true;
+                
+                try {
+                    const inputData = event.inputBuffer.getChannelData(0);
+                    const buffer = new ArrayBuffer(inputData.length * 2);
+                    const view = new DataView(buffer);
+                    for (let i = 0; i < inputData.length; i++) {
+                        view.setInt16(i * 2, inputData[i] * 0x7FFF, true);
+                    }
+                    
+                    // Check if socket is still connected before sending
+                    if (socket && socket.connected && socket.connected === true) {
+                        socket.emit('audioChunk', { chunk: buffer, sampleRate });
+                    }
+                } catch (error) {
+                    console.error('Audio processing error:', error);
+                } finally {
+                    isProcessing = false;
+                }
+            };
+            
+            source.connect(processor);
+            processor.connect(audioContext.destination);
+            
+            return {
+                stop: () => {
+                    try {
+                        source.disconnect();
+                        processor.disconnect();
+                        if (audioContext.state !== 'closed') {
+                            audioContext.close();
+                        }
+                    } catch (error) {
+                        console.error('Error stopping audio processor:', error);
+                    }
+                }
+            };
+        } catch (error) {
+            console.error('Error creating audio processor:', error);
+            return {
+                stop: () => {}
+            };
+        }
+    }, []);
 
     // --- AudioWorklet Processor (Modern Audio Processing) ---
     const createAudioWorkletProcessor = useCallback(async (stream, socket) => {
@@ -812,70 +856,9 @@ function App() {
             // Fallback to ScriptProcessor if AudioWorklet is not supported
             return createScriptProcessorFallback(stream, socket);
         }
-    }, []);
+    }, [createScriptProcessorFallback]);
 
-    // --- ScriptProcessor Fallback (for older browsers) ---
-    const createScriptProcessorFallback = useCallback(async (stream, socket) => {
-        try {
-            const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-            
-            // Resume audio context if it's suspended
-            if (audioContext.state === 'suspended') {
-                await audioContext.resume();
-            }
-            
-            const sampleRate = audioContext.sampleRate;
-            const source = audioContext.createMediaStreamSource(stream);
-            const processor = audioContext.createScriptProcessor(4096, 1, 1);
-            
-            let isProcessing = false;
-            
-            processor.onaudioprocess = (event) => {
-                if (isProcessing) return; // Prevent overlapping processing
-                isProcessing = true;
-                
-                try {
-                    const inputData = event.inputBuffer.getChannelData(0);
-                    const buffer = new ArrayBuffer(inputData.length * 2);
-                    const view = new DataView(buffer);
-                    for (let i = 0; i < inputData.length; i++) {
-                        view.setInt16(i * 2, inputData[i] * 0x7FFF, true);
-                    }
-                    
-                    // Check if socket is still connected before sending
-                    if (socket && socket.connected && socket.connected === true) {
-                        socket.emit('audioChunk', { chunk: buffer, sampleRate });
-                    }
-                } catch (error) {
-                    console.error('Audio processing error:', error);
-                } finally {
-                    isProcessing = false;
-                }
-            };
-            
-            source.connect(processor);
-            processor.connect(audioContext.destination);
-            
-            return {
-                stop: () => {
-                    try {
-                        source.disconnect();
-                        processor.disconnect();
-                        if (audioContext.state !== 'closed') {
-                            audioContext.close();
-                        }
-                    } catch (error) {
-                        console.error('Error stopping audio processor:', error);
-                    }
-                }
-            };
-        } catch (error) {
-            console.error('Error creating audio processor:', error);
-            return {
-                stop: () => {}
-            };
-        }
-    }, []);
+    
 
     // --- Updated Audio Processor Creation ---
     const createAudioProcessor = useCallback(async (stream, socket) => {
@@ -1048,28 +1031,6 @@ function App() {
 
     // --- UI/UX State ---
     const [theme, setTheme] = useState('light'); // 'light' or 'dark'
-    const [layout, setLayout] = useState('sideBySide'); // 'sideBySide', 'grid', 'spotlight'
-    const [performanceMode, setPerformanceMode] = useState('auto'); // 'auto', 'high', 'balanced', 'low'
-    const [virtualBackground, setVirtualBackground] = useState('none'); // 'none', 'blur', 'custom'
-
-    // --- Performance Optimization State ---
-    const [autoOptimize, setAutoOptimize] = useState(true);
-
-    const handleToggleCamera = useCallback(() => {
-        if (localStreamRef.current) {
-            localStreamRef.current.getVideoTracks().forEach(track => track.enabled = !track.enabled);
-        }
-    }, []);
-
-    const handleToggleMic = useCallback(() => {
-        if (localStreamRef.current) {
-            localStreamRef.current.getAudioTracks().forEach(track => track.enabled = !track.enabled);
-        }
-    }, []);
-
-    const handleToggleTranslation = useCallback(() => {
-        // This state was removed, so this function is now empty.
-    }, []);
 
     // --- Recording Functions ---
     const startRecording = useCallback(async () => {
@@ -1622,7 +1583,7 @@ function App() {
                 )}
             </div>
 
-            <div className={`video-container ${layout}-layout`}>
+            <div className={`video-container sideBySide-layout`}>
                 <div style={{ position: 'absolute', left: 0, right: 0, top: '-30px', margin: 'auto', width: 'fit-content', zIndex: 10 }}>
                     <span style={{
                         display: 'inline-block',
