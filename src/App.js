@@ -616,7 +616,7 @@ function App() {
             socket.disconnect();
             cleanupCall();
         };
-    }, [isLoggedIn, username, cleanupCall, t, callStatus]);
+    }, [isLoggedIn, username, cleanupCall, t]);
 
     useEffect(() => {
         if (isLoggedIn && socketRef.current?.connected) {
