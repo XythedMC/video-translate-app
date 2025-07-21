@@ -616,7 +616,8 @@ function App() {
             socket.disconnect();
             cleanupCall();
         };
-    }, [isLoggedIn, username, cleanupCall, t, callStatus]);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [isLoggedIn, username, cleanupCall, t]);
 
     useEffect(() => {
         if (isLoggedIn && socketRef.current?.connected) {
